@@ -8,3 +8,4 @@ well documented depending on the option in question.
 Languages included so far:
 
 * Go (Day 1, 2, 3)
+* Rust (Day 4, 5, 6)

@@ -9,3 +9,4 @@ Languages included so far:
 
 * Go (Day 1, 2, 3)
 * Rust (Day 4, 5, 6)
+* Kotlin (Day 7, 8, 9)

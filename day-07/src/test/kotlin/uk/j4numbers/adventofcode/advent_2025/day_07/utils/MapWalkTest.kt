@@ -4,7 +4,6 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.equals.shouldBeEqual
 import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.Coordinate
 import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.HistoricJoin
-import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.HistoricWeight
 import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.LightMap
 import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.SplitterNode
 import uk.j4numbers.adventofcode.advent_2025.day_07.pojo.WalkDetails

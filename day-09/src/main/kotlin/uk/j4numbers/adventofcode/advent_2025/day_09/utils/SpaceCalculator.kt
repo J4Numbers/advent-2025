@@ -2,6 +2,7 @@ package uk.j4numbers.adventofcode.advent_2025.day_09.utils
 
 import mu.KotlinLogging
 import uk.j4numbers.adventofcode.advent_2025.day_09.pojo.Coordinate
+import uk.j4numbers.adventofcode.advent_2025.day_09.pojo.CoordinateJoin
 import uk.j4numbers.adventofcode.advent_2025.day_09.pojo.NodeArea
 import kotlin.math.absoluteValue
 
@@ -14,111 +15,140 @@ class SpaceCalculator {
         return calculatedArea;
     }
 
-    fun fillNodePath(nodes: List<Coordinate>): List<Coordinate> {
-        val pathProgress = mutableListOf<Coordinate>();
+    fun fillNodePath(nodes: List<Coordinate>): Set<CoordinateJoin> {
+        val pathProgress = mutableSetOf<CoordinateJoin>();
 
         if (nodes.size > 1) {
             var workingNode = nodes[0];
-            val pathCircuit = nodes.toMutableList();
-            pathCircuit.add(workingNode);
-            for (i in 1 until pathCircuit.size) {
-                val targetNode = pathCircuit[i];
-                logger.debug { "New target node from working node ($workingNode) is $targetNode" };
-                while (targetNode != workingNode) {
-                    if (!pathProgress.contains(workingNode)) {
-                        logger.debug { "Adding new node to walking path - $workingNode" };
-                        pathProgress.add(workingNode);
-                    }
-                    if (workingNode.x != targetNode.x) {
-                        val increment = if (workingNode.x > targetNode.x) -1 else 1;
-                        workingNode = Coordinate(workingNode.x + increment, workingNode.y);
-                    } else if (workingNode.y != targetNode.y) {
-                        val increment = if (workingNode.y > targetNode.y) -1 else 1;
-                        workingNode = Coordinate(workingNode.x, workingNode.y + increment);
-                    }
-                }
+            for (i in 1 until nodes.size) {
+                pathProgress.add(CoordinateJoin(workingNode, nodes[i]));
+                workingNode = nodes[i];
             }
+            pathProgress.add(CoordinateJoin(workingNode, nodes[0]));
         }
 
         return pathProgress;
     }
 
-    fun testLineInPolygon(startPoint: Coordinate, endX: Long, pathCoordinates: List<Coordinate>, maxX: Long): Boolean {
-        var inIntersect = 0;
-        var outIntersect = 0;
-        var intersecting = pathCoordinates.contains(startPoint);
-        var focusX = startPoint.x;
-
-        logger.debug { "Testing line $startPoint until X position of $endX and $maxX" };
-        logger.debug { "Start point $startPoint was intersecting - $intersecting" };
-
-        while (focusX <= endX) {
-            val testCoord = Coordinate(focusX, startPoint.y);
-
-            if (pathCoordinates.contains(testCoord)) {
-                logger.debug { "Edge detected within shape at $testCoord" };
-                intersecting = true;
-            } else if (intersecting) {
-                logger.debug { "Previously detected edge within shape has now passed at $testCoord" };
-                inIntersect += 1;
-                intersecting = false;
+    fun testNodeOnCircuit(node: Coordinate, nodeCircuit: Set<CoordinateJoin>): Boolean {
+        // Quick filter
+        val deepCandidates = nodeCircuit.filter { test -> test.first.x == node.x || test.first.y == node.y }
+        // Deep filter
+        val testNodeOnCoordinateJoin: (CoordinateJoin) -> Boolean = {
+            var returnVal: Boolean;
+            if (it.first.x == node.x) {
+                logger.debug { "Inspecting candidate $node Y val between ${it.first.y} and ${it.second.y}" };
+                returnVal = (node.y in it.first.y..it.second.y) || (node.y in it.second.y..it.first.y);
+            } else {
+                logger.debug { "Inspecting candidate $node X val between ${it.first.x} and ${it.second.x}" };
+                returnVal = (node.x in it.first.x..it.second.x) || (node.x in it.second.x..it.first.x);
             }
-
-            focusX += 1;
-        }
-        while (focusX <= maxX) {
-            val testCoord = Coordinate(focusX, startPoint.y);
-
-            if (pathCoordinates.contains(testCoord)) {
-                logger.debug { "Edge detected outside of shape at $testCoord" };
-                intersecting = true;
-            } else if (intersecting) {
-                logger.debug { "Previously detected edge outside of shape has now passed at $testCoord" };
-                outIntersect += 1;
-                intersecting = false;
-            }
-
-            focusX += 1;
+            returnVal
         }
 
-        if (intersecting) {
-            logger.debug { "Edge of map reached while intersecting. Adding new out intersection for $focusX" };
-            outIntersect += 1;
-        }
-
-        logger.debug { "$startPoint -> $endX - Found $inIntersect intersections within rect" };
-        logger.debug { "$startPoint -> $maxX - Found ${inIntersect + outIntersect} intersections until the end" };
-
-        return inIntersect % 2 == 0 && outIntersect % 2 == 1;
+        return deepCandidates.any(testNodeOnCoordinateJoin);
     }
 
-    fun testPolygonInsidePolygon(firstCorner: Coordinate, secondCorner: Coordinate, pathCoordinates: List<Coordinate>, maxX: Long): Boolean {
-        val leftCorner: Coordinate;
-        val rightCorner: Coordinate;
-        if  (firstCorner.x > secondCorner.x) {
-            leftCorner = secondCorner;
-            rightCorner = firstCorner;
-        } else {
-            leftCorner = firstCorner;
-            rightCorner = secondCorner;
+    fun expandPath(nodes: List<Coordinate>, nodeCircuit: Set<CoordinateJoin>, expansionCount: Long, maxPoint: Coordinate): List<Coordinate> {
+        val expandedPath = mutableListOf<Coordinate>();
+
+        for (node in nodes) {
+            val leftAdjacent = testNodeOnCircuit(Coordinate(node.x - 1, node.y), nodeCircuit);
+            val upAdjacent = testNodeOnCircuit(Coordinate(node.x, node.y - 1), nodeCircuit);
+
+            // Interrogate horizontal intersections
+            var lIntersectCount = countIntersectsAgainstPolygon(
+                CoordinateJoin(Coordinate(-1, node.y), node),
+                nodeCircuit);
+            var rIntersectCount = countIntersectsAgainstPolygon(
+                CoordinateJoin(node, Coordinate(maxPoint.x, node.y)),
+                nodeCircuit);
+
+            val rightFacingNode = if (lIntersectCount == rIntersectCount) {
+                leftAdjacent;
+            } else {
+                rIntersectCount % 2 == 1;
+            }
+            logger.debug { "Inspecting $node horizontally shows it is facing to the right: $rightFacingNode ($lIntersectCount/$rIntersectCount)" }
+
+            // Ask if node is vertically towards the bottom
+            lIntersectCount = countIntersectsAgainstPolygon(
+                CoordinateJoin(Coordinate(node.x, -1), node),
+                nodeCircuit);
+            rIntersectCount = countIntersectsAgainstPolygon(
+                CoordinateJoin(node, Coordinate(node.x, maxPoint.y)),
+                nodeCircuit);
+
+            val downFacingNode: Boolean = if (lIntersectCount == rIntersectCount) {
+                upAdjacent;
+            } else {
+                rIntersectCount % 2 == 1;
+            }
+            logger.debug { "Inspecting $node vertically shows it is facing downwards: $downFacingNode ($lIntersectCount/$rIntersectCount)" }
+
+            val horizontalModifier = if (rightFacingNode) expansionCount else expansionCount * -1;
+            val verticalModifier = if (downFacingNode) expansionCount else expansionCount * -1;
+
+            expandedPath.add(Coordinate(node.x + horizontalModifier, node.y + verticalModifier));
         }
 
+        return expandedPath
+    }
+
+    fun testLineInPolygon(lineToTest: CoordinateJoin, pathCoordinates: Set<CoordinateJoin>): Boolean {
+        return pathCoordinates.none {
+            logger.debug { "Testing $it against $lineToTest - intersects: ${it.intersects(lineToTest)}"};
+            it.intersects(lineToTest)
+        };
+    }
+
+    fun countIntersectsAgainstPolygon(lineToTest: CoordinateJoin, pathCoordinates: Set<CoordinateJoin>): Int {
+        val intersectingList = pathCoordinates.filter { it.intersects(lineToTest) };
+        val joinSets = mutableListOf<MutableSet<Coordinate>>();
+
+        intersectingList.forEach { intersection -> run {
+            val added = false;
+            val existingJoins = joinSets.filter { joinSeries -> joinSeries.contains(intersection.first) || joinSeries.contains(intersection.second) };
+            if (existingJoins.isEmpty()) {
+                joinSets.add(mutableSetOf(intersection.first, intersection.second));
+            } else if (existingJoins.size == 1) {
+                existingJoins[0].add(intersection.first);
+                existingJoins[0].add(intersection.second);
+            } else if (existingJoins.size == 2) {
+                existingJoins[0].addAll(existingJoins[1]);
+                joinSets.remove(existingJoins[1]);
+            }
+        } }
+
+        logger.debug { "Reduced ${intersectingList.size} total intersections to ${joinSets.size} collapsed intersections for $lineToTest" };
+
+        return joinSets.size;
+    }
+
+    fun testPolygonInsidePolygon(firstCorner: Coordinate, secondCorner: Coordinate, pathCoordinates: Set<CoordinateJoin>): Boolean {
         logger.debug { "Check requested for polygon $firstCorner -> $secondCorner to confirm it is within main shape" };
 
-        val leftPoints = fillNodePath(listOf(leftCorner, Coordinate(leftCorner.x, rightCorner.y)));
-        return leftPoints.all { point -> testLineInPolygon(point, rightCorner.x, pathCoordinates, maxX) };
+        val edges = setOf(
+            CoordinateJoin(firstCorner, Coordinate(firstCorner.x, secondCorner.y)),
+            CoordinateJoin(Coordinate(firstCorner.x, secondCorner.y), secondCorner),
+            CoordinateJoin(secondCorner, Coordinate(secondCorner.x, firstCorner.y)),
+            CoordinateJoin(Coordinate(secondCorner.x, firstCorner.y), firstCorner),
+        );
+        return edges.all { edge -> testLineInPolygon(edge, pathCoordinates) };
     }
 
     fun calculateAreas(nodes: List<Coordinate>, limitedMode: Boolean): List<NodeArea> {
         val nodeAreas = mutableListOf<NodeArea>();
 
         val nodePath = fillNodePath(nodes);
-        val maxX = nodes.maxBy(Coordinate::x).x;
+        val maxX = nodes.maxBy(Coordinate::x).x + 1;
+        val maxY = nodes.maxBy(Coordinate::y).y + 1;
+        val boundaryPath = fillNodePath(expandPath(nodes, nodePath, 1, Coordinate(maxX, maxY)));
 
         for (i in 0 until nodes.size) {
             for (j in i+1 until nodes.size) {
                 val addPair = if (limitedMode)
-                    testPolygonInsidePolygon(nodes[i], nodes[j], nodePath, maxX)
+                    testPolygonInsidePolygon(nodes[i], nodes[j], boundaryPath)
                     else true;
                 if (addPair) {
                     nodeAreas.add(

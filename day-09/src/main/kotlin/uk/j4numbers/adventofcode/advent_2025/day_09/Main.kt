@@ -22,6 +22,7 @@ fun main(args: Array<String>) {
     logger.info { "Discovered ${fileContents.size} coordinates within input file" };
 
     val mode = args[1] == "limit";
+    logger.info { "Running in limited mode - $mode" };
     val spaceCalculator = SpaceCalculator();
     val distanceMap = spaceCalculator.calculateAreas(fileContents, mode);
 
